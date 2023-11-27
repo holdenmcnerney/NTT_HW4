@@ -15,11 +15,6 @@ def EKF(bearing_mat: np.array, range_mat:np.array, init_state:np.array):
     sigma_theta = 2     # deg
 
     P = np.diagflat([sigma_x, sigma_y, sigma_x_dot, sigma_y_dot, sigma_omega])
-    # Q_k_minus_1 = np.array([[1 / 2, 0, 0], \
-    #                         [0, 1 / 2, 0], \
-    #                         [1, 0, 0], \
-    #                         [0, 1, 0], \
-    #                         [0, 0, 1]])
     Q_k_minus_1 = np.diagflat([sigma_x**2, sigma_x_dot**2, sigma_omega**2])
     L_k_minus_1 = np.array([[0, 0, 0], \
                             [0, 0, 0], \
@@ -38,35 +33,20 @@ def EKF(bearing_mat: np.array, range_mat:np.array, init_state:np.array):
         y_dot = state_hist[i][3]
         omega = state_hist[i][4]
 
-        cos_plus_sin = (omega * np.cos(omega) - np.sin(omega)) / omega**2
-        sin_plus_cos = (omega * np.sin(omega) - 1 + np.cos(omega)) / omega**2
-        # F_k_minus_1_jacob = np.array([[1, 0, np.sin(omega) / omega, \
-        #                          -(1 - np.cos(omega)) / omega, \
-        #                          cos_plus_sin * x_dot - sin_plus_cos * y_dot], \
-        #                         [0, 1, (1 - np.cos(omega)) / omega, \
-        #                          np.sin(omega) / omega, \
-        #                          sin_plus_cos * x_dot + cos_plus_sin * y_dot], \
-        #                         [0, 0, np.cos(omega), -np.sin(omega), \
-        #                          -np.sin(omega) * x_dot - np.cos(omega) * y_dot], \
-        #                         [0, 0, np.sin(omega), np.cos(omega), \
-        #                          np.cos(omega) * x_dot - np.sin(omega * y_dot)], \
-        #                         [0, 0, 0, 0, 1]])
-        F_k_minus_1 = np.array([[1, 0, np.sin(omega) / omega, \
-                                 -(1 - np.cos(omega)) / omega, 0], \
-                                [0, 1, (1 - np.cos(omega)) / omega, \
-                                 np.sin(omega) / omega, 0], \
-                                [0, 0, np.cos(omega), -np.sin(omega), 0], \
-                                [0, 0, np.sin(omega), np.cos(omega), 0], \
+        F_k_minus_1 = np.array([[1, 0, np.sin(np.deg2rad(omega)) / omega, -(1 - np.cos(np.deg2rad(omega))) / omega, 0], \
+                                [0, 1, (1 - np.cos(np.deg2rad(omega))) / omega, np.sin(np.deg2rad(omega)) / omega, 0], \
+                                [0, 0, np.cos(np.deg2rad(omega)), -np.sin(np.deg2rad(omega)), 0], \
+                                [0, 0, np.sin(np.deg2rad(omega)), np.cos(np.deg2rad(omega)), 0], \
                                 [0, 0, 0, 0, 1]])
         
         H_k = np.array([[x / np.sqrt(x**2 + y**2), y / np.sqrt(x**2 + y**2), 0, 0, 0], \
                         [y / (x**2 + y**2), -x / (x**2 + y**2), 0, 0, 0]])
         
-        # P = F_k_minus_1_jacob @ P @ np.transpose(F_k_minus_1_jacob) + L_k_minus_1 @ Q_k_minus_1 @ np.transpose(L_k_minus_1)
         P = F_k_minus_1 @ P @ np.transpose(F_k_minus_1) + L_k_minus_1 @ Q_k_minus_1 @ np.transpose(L_k_minus_1)
         S_k = H_k @ P @ np.transpose(H_k) + np.eye(2) @ R_k @ np.eye(2)
         K_k = P @ np.transpose(H_k) @ nplin.inv(S_k)
         y_curr = H_k @ state_hist[i]
+        y_curr_col =  np.transpose(np.atleast_2d(y_curr))
 
         if np.ndim(bearings) != 0:
             
@@ -74,19 +54,21 @@ def EKF(bearing_mat: np.array, range_mat:np.array, init_state:np.array):
 
             for (bearing, range) in zip(bearings, ranges):
 
-                y_meas = np.array([[range * np.sin(bearing)], [range * np.cos(bearing)]])
-                mac_dist = np.transpose(y_meas - y_curr) @ S_k @ (y_meas - y_curr)
+                if not np.isnan(bearing) and not np.isnan(range):
+                    y_meas = np.array([[range], [bearing]])
+                    mac_dist = np.transpose(y_meas - y_curr_col) @ S_k @ (y_meas - y_curr_col)
+                    print(mac_dist)
 
-                if mac_dist < mac_dist_min:
+                    if mac_dist < mac_dist_min:
 
-                    mac_dist_min = mac_dist
-                    y_k = y_meas - y_curr
+                        mac_dist_min = mac_dist
+                        y_k = y_meas - np.transpose(np.atleast_2d(y_curr))
 
-                state_hist_new = np.transpose(np.atleast_2d(state_hist[i])) + K_k @ y_k
+            state_hist_new = np.transpose(np.atleast_2d(state_hist[i])) + K_k @ y_k
             
         else:
-            y_meas = np.array([[ranges * np.sin(bearings)], [ranges * np.cos(bearings)]])
-            y_k = y_meas - y_curr
+            y_meas = np.array([[ranges], [bearings]])
+            y_k = y_meas - y_curr_col
             state_hist_new = np.transpose(np.atleast_2d(state_hist[i])) + K_k @ y_k
         
         state_hist = np.vstack((state_hist, np.transpose(np.atleast_2d(state_hist_new))))
@@ -109,10 +91,11 @@ def main():
     lambda_c = 0.0032
 
     state_hist_clean = EKF(bearings_clean, ranges_clean, init_state)
-    # state_hist_clutter = EKF(bearings_clutter, ranges_clutter, init_state)
+    state_hist_clutter = EKF(bearings_clutter, ranges_clutter, init_state)
 
     fig1, axs1 = plt.subplots(1, 2)
-    axs1[0].plot(state_hist_clean[:, 1], state_hist_clean[:, 0])
+    # axs1[0].plot(state_hist_clean[:, 0], state_hist_clean[:, 1])
+    axs1[0].plot(state_hist_clutter[:, 0], state_hist_clutter[:, 1])
     # axs1[0].set_xlabel('')
     # axs1[0].set_ylabel('')
     # axs1[0].set_title('')
