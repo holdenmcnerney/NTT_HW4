@@ -3,8 +3,12 @@
 import numpy as np
 import numpy.linalg as nplin
 import matplotlib.pyplot as plt
-from scipy.stats import invgamma, chi2
-from scipy.linalg import sqrtm
+from scipy.stats import invgamma, chi2, norm
+from scipy.linalg import sqrtm, expm
+
+def norm_dist():
+
+    return 1
 
 def EKF(bearing_mat: np.array, range_mat: np.array, init_state: np.array):
 
@@ -153,11 +157,45 @@ def PDAF(bearing_mat: np.array, range_mat: np.array, init_state: np.array):
             + L_k_minus_1 @ Q_k_minus_1 @ np.transpose(L_k_minus_1)
         S_k = H_k @ P @ np.transpose(H_k) + np.eye(2) @ R_k @ np.eye(2)
         K_k = P @ np.transpose(H_k) @ nplin.inv(S_k)
+        y_curr_col = np.array([[np.sqrt(x**2 + y**2)], [np.arctan2(x, y)]])
 
         df = (len(bearings) - 1) * (2 - 1)
-        q = .05
-        gate_thres = chi2.ppf(q, df)
+        alpha = 0.05
+        P_G = 1 - alpha
+        gate_thres = chi2.ppf(P_G, df)
         vol_gate = np.pi * gate_thres**(df / 2) * sqrtm(S_k)
+        y_k_vec = np.array([[0], [0]])
+        L_list = []
+        y_meas_list = []
+
+        for (bearing, range) in zip(bearings, ranges):
+
+            if not np.isnan(bearing) and not np.isnan(range):
+
+                y_meas = np.array([[range], [bearing]])
+                y_k = y_meas - y_curr_col
+                mac_dist = np.transpose(y_k) \
+                                        @ nplin.inv(S_k) \
+                                        @ (y_k)
+
+                if mac_dist[0][0] < gate_thres:
+                    y_k_vec = np.hstack((y_k_vec, y_k))
+                    L_k_i = 1 / lambda_c * norm.pdf(y_meas, loc=y_curr_col, scale=S_k) * P_D
+                    L_list.append(L_k_i)
+                    y_meas_list.append(y_meas)
+
+        if L_list == []:
+            
+            Prob = 1
+
+        else:
+
+            a = 1
+        
+        y_k_vec = np.delete(y_k_vec, 0, 1)
+
+
+        pass
 
     return 1
 
@@ -175,7 +213,7 @@ def main():
     state_hist_clean_EKF = EKF(bearings_clean, ranges_clean, init_state)
     state_hist_clutter_EKF = EKF(bearings_clutter, ranges_clutter, init_state)
 
-    state_hist_clean_PDAF = PDAF(bearings_clean, ranges_clean, init_state)
+    # state_hist_clean_PDAF = PDAF(bearings_clean, ranges_clean, init_state)
     state_hist_clutter_PDAF = PDAF(bearings_clutter, ranges_clutter, init_state)
 
     plt.plot(state_hist_clean_EKF[:, 1], state_hist_clean_EKF[:, 0])
