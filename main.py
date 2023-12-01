@@ -1,5 +1,9 @@
 #!/bin/python3
 
+# Holden McNerney
+# Project 4
+# AEM 667 - Navigation and Target Tracking
+
 import numpy as np
 import numpy.linalg as nplin
 import matplotlib.pyplot as plt
@@ -9,7 +13,15 @@ from scipy.stats import chi2, multivariate_normal
 plt.rcParams['axes.grid'] = True
 
 def prob_calc(L_and_y_k: np.array, P_D:float, P_G:float):
-    
+    '''
+    Takes in likelihood scalar and y_k (measurement vs state estimate difference)
+    to generate the probabilities of no data association and the data association
+    with all measurements at the time step k
+
+    Returns probabilty of data assocaition vector for all measurements at 
+    timestep
+    '''
+
     prob_vec = np.array([0])
     sum_of_like = np.sum(L_and_y_k[0])
     prob_vec = np.append(prob_vec, (1 - P_G * P_D) \
@@ -25,7 +37,13 @@ def prob_calc(L_and_y_k: np.array, P_D:float, P_G:float):
     return prob_vec
 
 def prob_weight_avg(prob_vec:np.array, L_and_y_k:np.array):
+    '''
+    Takes in the probability of measurement data association and the measurement
+    to calculate the combined innovation
 
+    Returns the combined innovation r_k_tilde
+    '''
+    
     r_k_tilde = np.array([[0], [0]], dtype=float)
     prob_vec = np.delete(prob_vec, 0)
 
@@ -36,6 +54,12 @@ def prob_weight_avg(prob_vec:np.array, L_and_y_k:np.array):
     return r_k_tilde
 
 def EKF(bearing_mat: np.array, range_mat: np.array, init_state: np.array):
+    '''
+    Runs a EKF/Nearest Neighbor(NN) filter taking in inputs of initial state, range measurements, 
+    and bearing measurements. 
+
+    Returns numpy array with EKF/NN filtered state history 
+    '''
 
     sigma_x = 10                    # m
     sigma_y = 10                    # m
@@ -137,6 +161,12 @@ def EKF(bearing_mat: np.array, range_mat: np.array, init_state: np.array):
     return state_hist
 
 def PDAF(bearing_mat: np.array, range_mat: np.array, init_state: np.array):
+    '''
+    Runs a PDAF filter taking in inputs of initial state, range measurements, 
+    and bearing measurements. 
+
+    Returns numpy array with PDAF filtered state history 
+    '''
 
     sigma_x = 10                    # m
     sigma_y = 10                    # m
@@ -261,6 +291,11 @@ def PDAF(bearing_mat: np.array, range_mat: np.array, init_state: np.array):
     return state_hist
 
 def transform_clutter_data_xy(bearings:np.array, ranges:np.array, times:np.array):
+    '''
+    Calculates the x and y coordinates for all measurements (range and bearing)
+
+    Returns a numpy array of all of the measurements in x and y coordinates
+    '''
 
     meas_coord_mat = np.array([0, 0, 0])
 
@@ -302,15 +337,14 @@ def main():
     init_state = np.array([500, 500, 7.5, 7.5, np.deg2rad(2)])
     time_truth = np.linspace(0, 199, 200)
     time = np.linspace(0, 200, 201)
-
     state_hist_clean_EKF = EKF(bearings_clean, ranges_clean, init_state)
     state_hist_clutter_EKF = EKF(bearings_clutter, ranges_clutter, init_state)
     state_hist_clutter_PDAF = PDAF(bearings_clutter, ranges_clutter, init_state)
-
     clutter_data_xy = transform_clutter_data_xy(bearings_clutter, \
                                                 ranges_clutter, \
                                                     time_truth)
 
+    # PLOT ALL OF THE THINGS
     fig1, axs1 = plt.subplots(2, 2)
     axs1[0, 0].set_title('x vs y')
     axs1[0, 0].plot(truth[:, 2], truth[:, 0], 'b', label='Truth')
