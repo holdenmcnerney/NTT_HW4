@@ -4,7 +4,9 @@ import numpy as np
 import numpy.linalg as nplin
 import matplotlib.pyplot as plt
 from scipy.stats import chi2, multivariate_normal
-from scipy.linalg import sqrtm
+
+# Matplotlib global params
+plt.rcParams['axes.grid'] = True
 
 def prob_calc(L_and_y_k: np.array, P_D:float, P_G:float):
     
@@ -201,7 +203,7 @@ def PDAF(bearing_mat: np.array, range_mat: np.array, init_state: np.array):
         K_k = P @ H_k.T @ nplin.inv(S_k)
         y_curr_col = np.array([[np.sqrt(x**2 + y**2)], [np.arctan2(x, y)]])
 
-        df = 1 #(np.count_nonzero(~np.isnan(bearings)) - 1)
+        df = 1 
         alpha = 0.05
         P_G = 1 - alpha
         gate_thres = chi2.ppf(P_G, df)
@@ -258,6 +260,27 @@ def PDAF(bearing_mat: np.array, range_mat: np.array, init_state: np.array):
 
     return state_hist
 
+def transform_clutter_data_xy(bearings:np.array, ranges:np.array, times:np.array):
+
+    meas_coord_mat = np.array([0, 0, 0])
+
+    for i, time in enumerate(times):
+
+        for bearing in bearings[1, :]:
+
+            for range in ranges[i, :]:
+
+                if not np.isnan(bearing) and not np.isnan(range):
+
+                    x = range * np.sin(bearing)
+                    y = range * np.cos(bearing)
+                    meas_coord_mat = np.vstack((meas_coord_mat, \
+                                                np.array([time, x, y])))
+
+    meas_coord_mat = np.delete(meas_coord_mat, 0, 0)
+
+    return meas_coord_mat
+
 def main():
 
     bearings_clean = np.genfromtxt('bearings_clean.csv', \
@@ -284,31 +307,140 @@ def main():
     state_hist_clutter_EKF = EKF(bearings_clutter, ranges_clutter, init_state)
     state_hist_clutter_PDAF = PDAF(bearings_clutter, ranges_clutter, init_state)
 
-    fig1, axs1 = plt.subplots(1, 2)
-    axs1[0].set_title('Y vs X')
-    axs1[0].plot(truth[:, 2], truth[:, 0])
-    axs1[0].plot(state_hist_clean_EKF[:, 1], state_hist_clean_EKF[:, 0])
-    # axs1[0].plot(state_hist_clutter_EKF[:, 1], state_hist_clutter_EKF[:, 0])
-    axs1[0].plot(state_hist_clutter_PDAF[:, 1], state_hist_clutter_PDAF[:, 0])
+    clutter_data_xy = transform_clutter_data_xy(bearings_clutter, \
+                                                ranges_clutter, \
+                                                    time_truth)
 
-    axs1[1].set_title('Omega vs Time')
-    axs1[1].plot(time_truth, truth[:, 4])
-    axs1[1].plot(time, state_hist_clean_EKF[:, 4])
-    # axs1[1].plot(time, state_hist_clutter_EKF[:, 4])
-    axs1[1].plot(time, state_hist_clutter_PDAF[:, 4])
+    fig1, axs1 = plt.subplots(2, 2)
+    axs1[0, 0].set_title('x vs y')
+    axs1[0, 0].plot(truth[:, 2], truth[:, 0], 'b', label='Truth')
+    axs1[0, 0].plot(state_hist_clutter_EKF[:, 1], \
+                    state_hist_clutter_EKF[:, 0], 'y', label='Clutter EKF/NN')
+    axs1[0, 0].plot(state_hist_clutter_PDAF[:, 1], \
+                    state_hist_clutter_PDAF[:, 0], 'g', label='Clutter PDAF')
+    axs1[0, 0].set_ylabel(r'x, $m$')
+    axs1[0, 0].set_xlabel(r'y, $m$')
+    axs1[0, 0].legend()
 
-    fig2, axs2 = plt.subplots(1, 2)
-    axs2[0].set_title('X_dot vs Time')
-    axs2[0].plot(time_truth, truth[:, 1])
-    axs2[0].plot(time, state_hist_clean_EKF[:, 2])
-    # axs2[0].plot(time, state_hist_clutter_EKF[:, 2])
-    axs2[0].plot(time, state_hist_clutter_PDAF[:, 2])
+    axs1[0, 1].set_title('Omega vs Time')
+    axs1[0, 1].plot(time_truth, truth[:, 4], 'b', label='Truth')
+    axs1[0, 1].plot(time, state_hist_clutter_EKF[:, 4], 'y', \
+                    label='Clutter EKF/NN')
+    axs1[0, 1].plot(time, state_hist_clutter_PDAF[:, 4], 'g', \
+                    label='Clutter PDAF')
+    axs1[0, 1].set_xlabel(r'Time, $s$')
+    axs1[0, 1].set_ylabel(r'Omega $\omega$, $\frac{rad}{s}$')
+    axs1[0, 1].legend()
 
-    axs2[1].set_title('Y_dot vs Time')
-    axs2[1].plot(time_truth, truth[:, 3])
-    axs2[1].plot(time, state_hist_clean_EKF[:, 3])
-    # axs2[1].plot(time, state_hist_clutter_EKF[:, 3])
-    axs2[1].plot(time, state_hist_clutter_PDAF[:, 3])
+    axs1[1, 0].set_title('x vs y')
+    axs1[1, 0].plot(truth[:, 2], truth[:, 0], 'b', label='Truth')
+    axs1[1, 0].plot(state_hist_clean_EKF[:, 1], \
+                    state_hist_clean_EKF[:, 0], 'r', label='Clean EKF/NN')
+    axs1[1, 0].plot(state_hist_clutter_PDAF[:, 1], \
+                    state_hist_clutter_PDAF[:, 0], 'g', label='Clutter PDAF')
+    axs1[1, 0].set_ylabel(r'x, $m$')
+    axs1[1, 0].set_xlabel(r'y, $m$')
+    axs1[1, 0].legend()
+
+    axs1[1, 1].set_title('Omega vs Time')
+    axs1[1, 1].plot(time_truth, truth[:, 4], label='Truth')
+    axs1[1, 1].plot(time, state_hist_clean_EKF[:, 4], 'r', \
+                    label='Clean EKF/NN')
+    axs1[1, 1].plot(time, state_hist_clutter_PDAF[:, 4], 'g', \
+                    label='Clutter PDAF')
+    axs1[1, 1].set_xlabel(r'Time, $s$')
+    axs1[1, 1].set_ylabel(r'Omega $\omega$, $\frac{rad}{s}$')
+    axs1[1, 1].legend()
+
+    fig2, axs2 = plt.subplots(2, 2)
+    axs2[0, 0].set_title(r'$x_{dot}$ vs Time')
+    axs2[0, 0].plot(time_truth, truth[:, 1], 'b', label='Truth')
+    axs2[0, 0].plot(time, state_hist_clutter_EKF[:, 2], 'y', \
+                    label='Clutter EKF/NN')
+    axs2[0, 0].plot(time, state_hist_clutter_PDAF[:, 2], 'g', \
+                    label='Clutter PDAF')
+    axs2[0, 0].set_xlabel(r'Time, $s$')
+    axs2[0, 0].set_ylabel(r'$x_{dot}$, $\frac{m}{s}$')
+    axs2[0, 0].legend()
+
+    axs2[0, 1].set_title(r'$y_{dot}$ vs Time')
+    axs2[0, 1].plot(time_truth, truth[:, 3], 'b', label='Truth')
+    axs2[0, 1].plot(time, state_hist_clutter_EKF[:, 3], 'y', \
+                    label='Clutter EKF/NN')
+    axs2[0, 1].plot(time, state_hist_clutter_PDAF[:, 3], 'g', \
+                    label='Clutter PDAF')
+    axs2[0, 1].set_xlabel(r'Time, $s$')
+    axs2[0, 1].set_ylabel(r'$y_{dot}$, $\frac{m}{s}$')
+    axs2[0, 1].legend()
+
+    axs2[1, 0].set_title(r'$x_{dot}$ vs Time')
+    axs2[1, 0].plot(time_truth, truth[:, 1], 'b', label='Truth')
+    axs2[1, 0].plot(time, state_hist_clean_EKF[:, 2], 'r', \
+                    label='Clean EKF/NN')
+    axs2[1, 0].plot(time, state_hist_clutter_PDAF[:, 2], 'g', \
+                    label='Clutter PDAF')
+    axs2[1, 0].set_xlabel(r'Time, $s$')
+    axs2[1, 0].set_ylabel(r'$x_{dot}$, $\frac{m}{s}$')
+    axs2[1, 0].legend()
+
+    axs2[1, 1].set_title(r'$y_{dot}$ vs Time')
+    axs2[1, 1].plot(time_truth, truth[:, 3], 'b', label='Truth')
+    axs2[1, 1].plot(time, state_hist_clean_EKF[:, 3], 'r', \
+                    label='Clean EKF/NN')
+    axs2[1, 1].plot(time, state_hist_clutter_PDAF[:, 3], 'g', \
+                    label='Clutter PDAF')
+    axs2[1, 1].set_xlabel(r'Time, $s$')
+    axs2[1, 1].set_ylabel(r'$y_{dot}$, $\frac{m}{s}$')
+    axs2[1, 1].legend()
+
+    fig3, axs3 = plt.subplots(2, 2)
+    axs3[0, 0].set_title('x vs Time with clutter data')
+    axs3[0, 0].scatter(clutter_data_xy[:, 0], clutter_data_xy[:, 1], \
+                       label='Clutter Data', lw=0, alpha=0.2, s=7.5)
+    axs3[0, 0].plot(time_truth, truth[:, 0], 'b', label='Truth')
+    axs3[0, 0].plot(time, state_hist_clutter_EKF[:, 0], 'y', \
+                    label='Clutter EKF/NN')
+    axs3[0, 0].plot(time, state_hist_clutter_PDAF[:, 0], 'g', \
+                    label='Clutter PDAF')
+    axs3[0, 0].set_xlabel(r'Time, $s$')
+    axs3[0, 0].set_ylabel(r'x, $m$')
+    axs3[0, 0].legend()
+
+    axs3[0, 1].set_title('y vs Time with clutter data')
+    axs3[0, 1].scatter(clutter_data_xy[:, 0], clutter_data_xy[:, 2], \
+                       label='Clutter Data', lw=0, alpha=0.2, s=7.5)
+    axs3[0, 1].plot(time_truth, truth[:, 2], 'b', label='Truth')
+    axs3[0, 1].plot(time, state_hist_clutter_EKF[:, 1], 'y', \
+                    label='Clutter EKF/NN')
+    axs3[0, 1].plot(time, state_hist_clutter_PDAF[:, 1], 'g', \
+                    label='Clutter PDAF')
+    axs3[0, 1].set_xlabel(r'Time, $s$')
+    axs3[0, 1].set_ylabel(r'y, $m$')
+    axs3[0, 1].legend()
+
+    axs3[1, 0].set_title('x vs Time with clutter data')
+    axs3[1, 0].scatter(clutter_data_xy[:, 0], clutter_data_xy[:, 1], \
+                       label='Clutter Data', lw=0, alpha=0.2, s=7.5)
+    axs3[1, 0].plot(time_truth, truth[:, 0], 'b', label='Truth')
+    axs3[1, 0].plot(time, state_hist_clean_EKF[:, 0], 'r', \
+                    label='Clean EKF/NN')
+    axs3[1, 0].plot(time, state_hist_clutter_PDAF[:, 0], 'g', \
+                    label='Clutter PDAF')
+    axs3[1, 0].set_xlabel(r'Time, $s$')
+    axs3[1, 0].set_ylabel(r'x, $m$')
+    axs3[1, 0].legend()
+
+    axs3[1, 1].set_title('y vs Time with clutter data')
+    axs3[1, 1].scatter(clutter_data_xy[:, 0], clutter_data_xy[:, 2], \
+                       label='Clutter Data', lw=0, alpha=0.2, s=7.5)
+    axs3[1, 1].plot(time_truth, truth[:, 2], 'b', label='Truth')
+    axs3[1, 1].plot(time, state_hist_clean_EKF[:, 1], 'r', \
+                    label='Clean EKF/NN')
+    axs3[1, 1].plot(time, state_hist_clutter_PDAF[:, 1], 'g', \
+                    label='Clutter PDAF')
+    axs3[1, 1].set_xlabel(r'Time, $s$')
+    axs3[1, 1].set_ylabel(r'y, $m$')
+    axs3[1, 1].legend()
 
     plt.show()
 
