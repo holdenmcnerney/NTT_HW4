@@ -233,7 +233,7 @@ def PDAF(bearing_mat: np.array, range_mat: np.array, init_state: np.array):
         K_k = P @ H_k.T @ nplin.inv(S_k)
         y_curr_col = np.array([[np.sqrt(x**2 + y**2)], [np.arctan2(x, y)]])
 
-        df = 1 
+        df = 2 
         alpha = 0.05
         P_G = 1 - alpha
         gate_thres = chi2.ppf(P_G, df)
